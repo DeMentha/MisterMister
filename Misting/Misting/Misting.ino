@@ -47,6 +47,9 @@ const float BAT_SCALING = 1.05 * 5 * ((5.1+15)/5.1) / 1024;
 const float BAT_LIMIT_HIGH = 15; // Volts
 const float BAT_LIMIT_LOW = 11;  // Volts
 
+const int PUMP_FLOW_PULSE = 174; // Pulses per Gallon
+const int MIST_FLOW_PULSE = 380; // Pulses per Gallon
+
 byte statusLed = 13;
 
 byte sensorInterrupt = 0;  // 0 = digital pin 2
@@ -56,8 +59,8 @@ byte sensorPin       = 2;
 // litre/minute of flow.
 float calibrationFactor = 4.5;
 
-volatile byte mistPulseCount;  
-volatile byte pumpPulseCount;  
+volatile int mistPulseCount;  
+volatile int pumpPulseCount;  
 
 float flowRate;
 unsigned int flowMilliLitres;
@@ -65,10 +68,10 @@ unsigned long totalMilliLitres;
 
 unsigned long oldTime;
 
+long pumpFlowLastTimeChecked = millis();
 
 void setup()
 {
-
   pinMode(PRIME_VALVE_PIN, OUTPUT);
   primingValveOpen();
   pinMode(MIST_VALVE_PIN, OUTPUT);
@@ -78,9 +81,10 @@ void setup()
   pinMode(SPARE_RELAY_PIN, OUTPUT);
   digitalWrite(SPARE_RELAY_PIN,HIGH);
 
+  pumpFlowLastTimeChecked = millis();
   pinMode(PUMP_FLOW_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(PUMP_FLOW_PIN), pumpPulseCounterISR, RISING);
-
+  
   pinMode(MIST_FLOW_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(MIST_FLOW_PIN), mistPulseCounterISR, RISING);
   
@@ -120,18 +124,121 @@ void setup()
   lcd.clear();
 	lcd.setCursor(0, 0);
 	lcd.print("DEMENTHA MISTING 2.0");
-  delay(5000);
-    
-  while(1) 
-  {
-    initialize();
-    prime();
+
+  long lastTime = millis();
+  while(1) {
+    if (millis() - lastTime > 2000) {
+      break;
+    }
   }
+    
+//  while(1) 
+//  {
+//    initialize();
+//    prime();
+//  }
 
 }
 
+int RESULT_OK = 0;
+int RESULT_FAIL = 1;
+int RESULT_WAIT = 2;
+
+enum phase {
+  one,
+  two,
+  three
+};
+
+phase currentPhase = one;
+
+// Flow Rate Variables
+float pumpFlowRate; // Pulses / Second
+float pumpVolumeRate; // Gallons / Minute
+
+// Phase 1
+boolean phaseOneSetupComplete = false;
+long phaseOneStartTime;
+const int PHASE_ONE_PUMP_MIN_FLOW_RATE = 200;
+const int PHASE_ONE_PUMP_MAX_FLOW_RATE = 400;
+
 void loop()
 {
+  continuousHaltCheck();
+  if (currentPhase == one) {
+    phaseOneSetup();
+
+    // TODO: Set start time after FLOW_WAIT_TIME
+    int check = phaseOneCheck();
+    if (check == RESULT_OK) {
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("PRIMED BITCH!");
+      delay(1000);
+    } else if (check == RESULT_FAIL) {
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("HALT!");
+      delay(1000);
+    }
+  } else if (currentPhase == two) {
+    
+  } else if (currentPhase == three) {
+    
+  }
+}
+
+void phaseOneSetup() {
+  if (phaseOneSetupComplete) {
+    return;
+  }
+
+  primingValveOpen();
+  mistingValveClose();
+  pumpEnable();
+  phaseOneStartTime = millis();
+  
+  updatePumpFlowRate();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Flow Rate: ");
+  lcd.setCursor(0,1);
+  lcd.print(pumpFlowRate);
+
+  phaseOneSetupComplete = true;
+}
+
+const int PHASE_ONE_WAIT_TIME = 2 * 1 * 1000; // Wait one minute before checking flow rate.
+
+int phaseOneCheck() {
+  if (millis() - phaseOneStartTime > PHASE_ONE_WAIT_TIME) {
+    updatePumpFlowRate();
+    if (pumpFlowRate > PHASE_ONE_PUMP_MIN_FLOW_RATE && pumpFlowRate < PHASE_ONE_PUMP_MAX_FLOW_RATE) {
+      return RESULT_OK;
+    } else {
+      return RESULT_FAIL;
+    }
+  }
+  return RESULT_WAIT;
+}
+
+/*
+ * Returns the Pump Flow Rate (pulses / second)
+ */
+void updatePumpFlowRate() {
+  long count = pumpPulseCount;
+  float timePassed = (millis() - pumpFlowLastTimeChecked) / 1000;
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(count);
+  lcd.setCursor(0,1);
+  lcd.print(timePassed);
+  pumpPulseCount = 0;
+  pumpFlowLastTimeChecked = millis();
+
+  pumpFlowRate = (float) count / (float) timePassed;
+  pumpVolumeRate = (float) count / (float) PUMP_FLOW_PULSE;
 }
 
 // PrintUpTime(outdev, secs) - print uptime in HH:MM:SS format
@@ -166,10 +273,17 @@ uint8_t hr, mins, sec;
 
 void initialize()
 {
+  
   lcd.clear();  
-  checkBatteryVoltage();
-  delay(5000);
+  checkBatteryVoltage(true);
+  delay(1000);
 
+//  lcd.clear();
+//  lcd.setCursor(0,0);
+//  lcd.print("Pulse Count: ");
+//  lcd.setCursor(0,1);
+//  lcd.print(mistPulseCount);
+//  delay(5000);
   // Open priming valve
   lcd.clear();
   lcd.setCursor(0,0);
@@ -177,7 +291,7 @@ void initialize()
   lcd.setCursor(0,1);
   lcd.print("VALVE...");
   primingValveOpen();
-  delay(5000);
+  delay(1000);
 
   // Close misting valve
   lcd.clear();
@@ -186,7 +300,7 @@ void initialize()
   lcd.setCursor(0,1);
   lcd.print("VALVE...");
   mistingValveClose();
-  delay(5000);
+  delay(1000);
 
   // Check motor temperature
   lcd.clear();
@@ -194,7 +308,7 @@ void initialize()
   lcd.print("CHECKING PUMP");
   lcd.setCursor(0,1);
   lcd.print("TEMPERATURE...");
-  delay(5000);
+  delay(1000);
 
   // Check misting flow sensor, flow should be very close to zero
   lcd.clear();
@@ -202,7 +316,7 @@ void initialize()
   lcd.print("CHECKING MIST");
   lcd.setCursor(0,1);
   lcd.print("FLOW SENSOR...");
-  delay(5000);
+  delay(2000);
 
   // Check pump flow sensor, flow should be very close to zero
   lcd.clear();
@@ -210,7 +324,7 @@ void initialize()
   lcd.print("CHECKING PUMP FLOW");
   lcd.setCursor(0,1);
   lcd.print("SENSOR...");
-  delay(5000);
+  delay(1000);
 
   // Check pressure switch, should be low
   lcd.clear();
@@ -218,8 +332,7 @@ void initialize()
   lcd.print("CHECKING PRESSURE");
   lcd.setCursor(0,1);
   lcd.print("SWITCH...");
-  delay(5000);
-
+  delay(1000);
   // Check pump switch, should be off
 }
 
@@ -302,21 +415,26 @@ float readBatteryVoltage()
   return analogRead(BAT_VOLTAGE_PIN)*BAT_SCALING;
 }
 
-void checkBatteryVoltage()
+boolean continuousHaltCheck() {
+  // Battery Voltage Check
+  checkBatteryVoltage(false);
+}
+
+void checkBatteryVoltage(boolean displayVoltage)
 {
   
   char strBuffer[21];
   char tempBuffer[6];
   
   float temp = readBatteryVoltage();
-
   
   // Check battery voltage
   dtostrf(readBatteryVoltage(), 4, 2, tempBuffer);
-  sprintf(strBuffer,"BATT VOLTAGE: %sV", tempBuffer);
-      
-  lcd.setCursor(0, 1);
-  lcd.print(strBuffer);
+  if (displayVoltage) {
+    sprintf(strBuffer,"BATT VOLTAGE: %sV", tempBuffer);  
+    lcd.setCursor(0, 1);
+    lcd.print(strBuffer);
+  }
   
   if (temp < BAT_LIMIT_LOW)
   {
@@ -343,8 +461,10 @@ void checkBatteryVoltage()
      lcd.print("ERROR: HALT SYSTEM!");
      while(1);
   }
-  lcd.setCursor(0,2);
-  lcd.print("BATTERY VOLTAGE OK.");
+  if (displayVoltage) {
+    lcd.setCursor(0,2);
+    lcd.print("BATTERY VOLTAGE OK.");
+  }
 }
 
 /*
