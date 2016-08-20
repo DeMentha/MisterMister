@@ -68,14 +68,80 @@ float pumpFlowRate; // Pump flow rate (Pulses / Second)
 float pumpVolumeRate; // Pump volume (Gallons / Minute)
 long pumpFlowLastTimeChecked = millis();
 
-// Phase One variables
-boolean phaseOneSetupComplete = false;
-long phaseOneStartTime;
-const int PHASE_ONE_PUMP_MIN_FLOW_RATE = 200;
-const int PHASE_ONE_PUMP_MAX_FLOW_RATE = 400;
+/**
+ * Class that stores all phase one related variables and functions.
+ */
+class PhaseOne
+{
+  boolean phaseOneSetupComplete = false;
+  long phaseOneStartTime;
+  const int PHASE_ONE_PUMP_MIN_FLOW_RATE = 200;
+  const int PHASE_ONE_PUMP_MAX_FLOW_RATE = 400;
 
-// Wait one minute before checking flow rate.
-const int PHASE_ONE_WAIT_TIME = 2 * 1 * 1000;
+  // Wait one minute before checking flow rate.
+  const int PHASE_ONE_WAIT_TIME = 2 * 1 * 1000;
+
+  void (*primingValveOpen)();
+  void (*mistingValveClose)();
+  void (*pumpEnable)();
+  void (*updatePumpFlowRate)();
+public:
+  PhaseOne(void (*primingValveOpen)(), void (*mistingValveClose)(),
+    void (*pumpEnable)(), void (*updatePumpFlowRate)())
+  {
+    this->primingValveOpen = primingValveOpen;
+    this->mistingValveClose = mistingValveClose;
+    this->pumpEnable = pumpEnable;
+    this->updatePumpFlowRate = updatePumpFlowRate;
+  }
+
+  void setup();
+  int check();
+};
+
+/**
+ * Gets the system ready for phase one.
+ */
+void PhaseOne::setup()
+{
+  if (phaseOneSetupComplete) {
+    return;
+  }
+
+  primingValveOpen();
+  mistingValveClose();
+  pumpEnable();
+  phaseOneStartTime = millis();
+
+  updatePumpFlowRate();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Flow Rate: ");
+  lcd.setCursor(0,1);
+  lcd.print(pumpFlowRate);
+
+  phaseOneSetupComplete = true;
+}
+
+/**
+ * Checks if phase one has completed succesfully. Returns OK, FAIL or WAIT.
+ * WAIT means we're still waiting for the result.
+ */
+int PhaseOne::check() {
+  if (millis() - phaseOneStartTime > PHASE_ONE_WAIT_TIME) {
+    updatePumpFlowRate();
+    if (pumpFlowRate > PHASE_ONE_PUMP_MIN_FLOW_RATE
+        && pumpFlowRate < PHASE_ONE_PUMP_MAX_FLOW_RATE) {
+      return RESULT_OK;
+    } else {
+      return RESULT_FAIL;
+    }
+  }
+  return RESULT_WAIT;
+}
+
+PhaseOne phaseOne(&primingValveOpen, &mistingValveClose, &pumpEnable,
+    updatePumpFlowRate);
 
 /*
 * This is run once by the arduino board.
@@ -136,9 +202,9 @@ void setup() {
 void loop() {
   continuousHaltCheck();
   if (currentPhase == one) {
-    phaseOneSetup();
+    phaseOne.setup();
 
-    int check = phaseOneCheck();
+    int check = phaseOne.check();
     if (check == RESULT_OK) {
       lcd.clear();
       lcd.setCursor(0,0);
@@ -166,46 +232,6 @@ void loop() {
 void preconditionsCheck() {
   checkBatteryVoltage(true);
   delay(1000);
-}
-
-// Phase One Methods
-/**
- * Gets the system ready for phase one.
- */
-void phaseOneSetup() {
-  if (phaseOneSetupComplete) {
-    return;
-  }
-
-  primingValveOpen();
-  mistingValveClose();
-  pumpEnable();
-  phaseOneStartTime = millis();
-
-  updatePumpFlowRate();
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("Flow Rate: ");
-  lcd.setCursor(0,1);
-  lcd.print(pumpFlowRate);
-
-  phaseOneSetupComplete = true;
-}
-
-/**
- * Checks if phase one has completed succesfully. Returns OK, FAIL or WAIT.
- * WAIT means we're still waiting for the result.
- */
-int phaseOneCheck() {
-  if (millis() - phaseOneStartTime > PHASE_ONE_WAIT_TIME) {
-    updatePumpFlowRate();
-    if (pumpFlowRate > PHASE_ONE_PUMP_MIN_FLOW_RATE && pumpFlowRate < PHASE_ONE_PUMP_MAX_FLOW_RATE) {
-      return RESULT_OK;
-    } else {
-      return RESULT_FAIL;
-    }
-  }
-  return RESULT_WAIT;
 }
 
 // Methods to execute specific tasks
