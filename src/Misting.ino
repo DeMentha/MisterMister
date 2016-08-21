@@ -1,6 +1,7 @@
 #include <hd44780_I2Cexp.h>
-#include <MistLCD.h>
-
+#include <Logger.h>
+#include <StandardCplusplus.h>
+// #include <queue>
 
 hd44780_I2Cexp lcd;
 
@@ -21,12 +22,13 @@ byte PUMP_FLOW_PIN = 2;       // D2 - Flow sensor for pump (counts pulses)
 byte MIST_FLOW_PIN = 3;       // D3 - Mist sensor must be 2 or 3 for reasons
                               // stated above.
 
-byte PRESSURE_SWITCH_PIN = 4; // D4 - Switch goes off at a given pressure value
 
-byte MIST_MODE_PIN = 5;       // D5 - Simple on/off switch for controlling mist.
+byte MIST_MODE_PIN = 4;       // D4 - Simple on/off switch for controlling mist.
+byte PRESSURE_SWITCH_PIN = 5; // D5 - Switch goes off at a given pressure value
+
 byte PUMP_RELAY_PIN = 6;      // D6 - Enables or disables the pump
 byte SPARE_RELAY_PIN = 7;     // D7 - Spare Pin
-byte PUMP_SWITCH_PIN = 8;     // D8 - ?
+byte PUMP_SWITCH_PIN = 8;     // D8 - Pump Pressure switch
 
 
 // Analog Pin Allocations
@@ -51,6 +53,7 @@ const int STEP_DELAY = 5000; // The time to wait in between each step (5 secs)
 
 // Phase State
 enum phase {
+  halt,
   one,
   two,
   three
@@ -64,18 +67,29 @@ int RESULT_WAIT = 2;
 
 // Mist and Pump Flow Sensors data
 volatile int mistPulseCount;
+volatile int lastMistPulseCount;
+volatile int totalMistPulseCount;
+
+float mistFlowRate;
+float totalMistVolume;
+long mistFlowLastTimeChecked = millis();
+
 volatile int pumpPulseCount;
 volatile int lastPulseCount;
 
-// std::queue<long> mistPulseTimestamps;
+volatile int totalPumpPulseCount;
+
+// queue<long> mistPulseTimestamps;
 // std::queue<long> pumpPulseTimestamps;
 
 int MAX_PULSES_STORED = 5; // The number of timestamps we store.
 
 float pumpFlowRate; // Pump flow rate (Pulses / Second)
 float pumpVolumeRate; // Pump volume (Gallons / Minute)
+float totalPumpVolume; // Total Volume Pumped
 long pumpFlowLastTimeChecked = millis();
-long timeCheck = millis();
+
+
 
 /**
  * Class that stores all phase one related variables and functions.
@@ -83,20 +97,21 @@ long timeCheck = millis();
 class PhaseOne
 {
   boolean phaseOneSetupComplete = false;
-  long phaseOneStartTime;
+  long timeRunner;
   long phaseOneInitTime;
-  long timeCheck;
-  const float PHASE_ONE_PUMP_MIN_FLOW_RATE = 0.8;
-  const float PHASE_ONE_PUMP_MAX_FLOW_RATE = 1.8;
 
+  // Constants
+  static const float PHASE_ONE_PUMP_MIN_FLOW_RATE;
+  static const float PHASE_ONE_PUMP_MAX_FLOW_RATE;
   // Wait one minute before checking flow rate.
-  const int PHASE_ONE_WAIT_TIME = 60 * 1 * 1000; // Currently 60 seconds
+  static const double PHASE_ONE_WAIT_TIME; // Currently 60 seconds
 
   void (*primingValveOpen)();
   void (*mistingValveClose)();
   void (*pumpEnable)();
   void (*pumpDisable)();
   void (*updatePumpFlowRate)();
+  // void (*timeLeft)();
 public:
   PhaseOne(void (*primingValveOpen)(), void (*mistingValveClose)(),
     void (*pumpEnable)(), void (*updatePumpFlowRate)(), void (*pumpDisable)())
@@ -106,11 +121,17 @@ public:
     this->pumpEnable = pumpEnable;
     this->pumpDisable = pumpDisable;
     this->updatePumpFlowRate = updatePumpFlowRate;
+    // this->timeLeft = timeLeft;
   }
 
   void setup();
   int check();
+  void tearDown();
 };
+
+const float PhaseOne::PHASE_ONE_PUMP_MAX_FLOW_RATE = 1.8;
+const float PhaseOne::PHASE_ONE_PUMP_MIN_FLOW_RATE = 0.8;
+const double PhaseOne::PHASE_ONE_WAIT_TIME = 60 * 1 * 1000; // Currently 60 seconds
 
 /**
  * Gets the system ready for phase one.
@@ -121,19 +142,19 @@ void PhaseOne::setup()
     return;
   }
 
+  mistingValveClose();
   primingValveOpen();
   delay(4000);
   pumpEnable();
-  phaseOneStartTime = millis();
+  timeRunner = millis();
   phaseOneInitTime = millis();
-  timeCheck = millis();
   updatePumpFlowRate();
 
   lcd.clear();
   lcd.setCursor(0,0);
-  lcd.print("Flow Rate: ");
+  lcd.print("Phase 1: Priming");
   lcd.setCursor(0,1);
-  lcd.print(pumpFlowRate);
+  lcd.print("Let's Move Water");
 
   phaseOneSetupComplete = true;
 }
@@ -143,22 +164,35 @@ void PhaseOne::setup()
  * WAIT means we're still waiting for the result.
  */
 int PhaseOne::check() {
-  if (millis() - phaseOneStartTime > 2000) {
+  if (millis() - timeRunner > 2000) { // Update values every two seconds
     updatePumpFlowRate();
-    phaseOneStartTime = millis();
-    if (millis() - phaseOneInitTime > 10000) {
-      if (pumpFlowRate > 0.8 && pumpFlowRate < 1.8) {
-        pumpDisable();
+    timeRunner = millis();
+    if (millis() - phaseOneInitTime > 20000) {
+      if (pumpFlowRate >= 0.8
+          && pumpFlowRate <= 1.8) {
+        tearDown();
         return RESULT_OK;
       } else {
+        tearDown();
         return RESULT_FAIL;
       }
     } else {
       lcd.setCursor(0,3);
-      lcd.print( ( (float)phaseOneInitTime + (float)10000 - (float)millis() ) / (float)1000);
+      float timeLeft = ( (float) phaseOneInitTime
+          + 20000 - (float)millis() ) / (float) 1000;
+      // timeLeft(timeLeft);
+      char strBuffer[21];
+      char tempBuffer[6];
+      dtostrf(timeLeft, 4, 1, tempBuffer);
+      sprintf(strBuffer,"Countdown: %ss", tempBuffer);
+      lcd.print(strBuffer);
     }
   }
   return RESULT_WAIT;
+}
+
+void PhaseOne::tearDown() {
+  pumpDisable();
 }
 
 PhaseOne phaseOne(&primingValveOpen, &mistingValveClose, &pumpEnable,
@@ -170,37 +204,155 @@ PhaseOne phaseOne(&primingValveOpen, &mistingValveClose, &pumpEnable,
 class PhaseTwo
 {
   boolean phaseTwoSetupComplete = false;
-  long phaseTwoStartTime;
+  long timeRunner;
   long phaseTwoInitTime;
-  long timeCheck;
-  // const float PHASE_ONE_PUMP_MIN_FLOW_RATE = 0.8;
-  // const float PHASE_ONE_PUMP_MAX_FLOW_RATE = 1.8;
+
+  // Constants
+  static const float PHASE_TWO_MIN_VOLUME;
+  static const float PHASE_TWO_MAX_VOLUME;
 
   // Wait one minute before checking flow rate.
-  // const int PHASE_ONE_WAIT_TIME = 60 * 1 * 1000; // Currently 60 seconds
+  static const long PHASE_TWO_WAIT_TIME;
 
-  void (*mistingValveOpen)();
+  void (*mistingValveClose)();
   void (*primingValveClose)();
   void (*pumpEnable)();
   void (*pumpDisable)();
   void (*updatePumpFlowRate)();
+  bool (*readPressureSwitch)();
+  // void (*timeLeft)();
 public:
-  PhaseTwo(void (*mistingValveOpen)(), void (*primingValveClose)(),
-    void (*pumpEnable)(), void (*updatePumpFlowRate)(), void (*pumpDisable)())
+  PhaseTwo(void (*mistingValveClose)(), void (*primingValveClose)(),
+    void (*pumpEnable)(), void (*updatePumpFlowRate)(), void (*pumpDisable)(),
+    bool (*readPressureSwitch)())
   {
-    this->mistingValveOpen = mistingValveOpen;
+    this->mistingValveClose = mistingValveClose;
     this->primingValveClose = primingValveClose;
     this->pumpEnable = pumpEnable;
     this->pumpDisable = pumpDisable;
     this->updatePumpFlowRate = updatePumpFlowRate;
+    this->readPressureSwitch = readPressureSwitch;
+    // this->timeLeft = timeLeft;
   }
 
   void setup();
   int check();
+  void tearDown();
 };
+
+const float PhaseTwo::PHASE_TWO_MIN_VOLUME = 1.5;
+const float PhaseTwo::PHASE_TWO_MAX_VOLUME = 2.5;
+const long PhaseTwo::PHASE_TWO_WAIT_TIME = 60 * 1 * 1000; // Currently 60 seconds
 
 void PhaseTwo::setup() {
   if (phaseTwoSetupComplete) {
+    return;
+  }
+
+  totalPumpPulseCount = 0;
+  mistingValveClose();
+  primingValveClose();
+  delay(4000);
+  pumpEnable();
+  timeRunner = millis();
+  phaseTwoInitTime = millis();
+  updatePumpFlowRate();
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Phase 2: Accumulate");
+  lcd.setCursor(0,1);
+  lcd.print("Water Ballon coming");
+  lcd.setCursor(0,2);
+  lcd.print("right up!");
+
+  phaseTwoSetupComplete = true;
+}
+
+int PhaseTwo::check() {
+  if (millis() - timeRunner > 2000) {
+    updatePumpFlowRate();
+    timeRunner = millis();
+    if (millis() - phaseTwoInitTime > 60000) {
+      if (totalPumpVolume >= 0.01 && totalPumpVolume <= 3.0
+          && readPressureSwitch() /* TODO: re-add this && readPumpPressureSwitch() */) {
+        tearDown();
+        return RESULT_OK;
+      } else {
+        tearDown();
+        return RESULT_FAIL;
+      }
+    } else {
+      lcd.setCursor(0,3);
+      float timeLeft = ( (float) phaseTwoInitTime
+          + 60000 - (float)millis() ) / (float) 1000;
+      char strBuffer[21];
+      char tempBuffer[6];
+      dtostrf(timeLeft, 4, 1, tempBuffer);
+      sprintf(strBuffer,"Countdown: %ss", tempBuffer);
+      lcd.print(strBuffer);
+    }
+  }
+  return RESULT_WAIT;
+}
+
+void PhaseTwo::tearDown() {
+  pumpDisable();
+}
+
+PhaseTwo phaseTwo(&mistingValveClose, &primingValveClose, &pumpEnable,
+    updatePumpFlowRate, &pumpDisable, &readPressureSwitch);
+
+/**
+ * Class that stores all phase one related variables and functions.
+ */
+class PhaseThree
+{
+  boolean phaseThreeSetupComplete = false;
+  long timeRunner;
+  long phaseThreeInitTime;
+  int errorCount;
+
+  // Constants
+  // static const float PHASE_TWO_MIN_VOLUME;
+  // static const float PHASE_TWO_MAX_VOLUME;
+
+  // Wait one minute before checking flow rate.
+  // static const long PHASE_TWO_WAIT_TIME;
+
+  void (*mistingValveOpen)();
+  void (*mistingValveClose)();
+  void (*primingValveClose)();
+  void (*pumpEnable)();
+  void (*pumpDisable)();
+  void (*updatePumpFlowRate)();
+  void (*updateMistFlowRate)();
+public:
+  PhaseThree(void (*mistingValveOpen)(), void (*mistingValveClose)(),
+    void (*primingValveClose)(), void (*pumpEnable)(),
+    void (*updatePumpFlowRate)(), void (*pumpDisable)(),
+    void (*updateMistFlowRate)())
+  {
+    this->mistingValveOpen = mistingValveOpen;
+    this->mistingValveClose = mistingValveClose;
+    this->primingValveClose = primingValveClose;
+    this->pumpEnable = pumpEnable;
+    this->pumpDisable = pumpDisable;
+    this->updatePumpFlowRate = updatePumpFlowRate;
+    this->updateMistFlowRate = updateMistFlowRate;
+  }
+
+  void setup();
+  int check();
+  void tearDown();
+};
+
+// const float PhaseTwo::PHASE_TWO_MIN_VOLUME = 1.5;
+// const float PhaseTwo::PHASE_TWO_MAX_VOLUME = 2.5;
+// const long PhaseTwo::PHASE_TWO_WAIT_TIME = 60 * 1 * 1000; // Currently 60 seconds
+
+void PhaseThree::setup() {
+  if (phaseThreeSetupComplete) {
     return;
   }
 
@@ -208,44 +360,79 @@ void PhaseTwo::setup() {
   mistingValveOpen();
   delay(4000);
   pumpEnable();
-  phaseTwoStartTime = millis();
-  phaseTwoInitTime = millis();
-  timeCheck = millis();
-  updatePumpFlowRate();
+  timeRunner = millis();
+  phaseThreeInitTime = millis();
+  updateMistFlowRate();
 
   lcd.clear();
   lcd.setCursor(0,0);
-  lcd.print("Phase Two Start");
+  lcd.print("Phase 3: Mist");
+  lcd.setCursor(0,1);
+  lcd.print("Let's get some");
+  lcd.setCursor(0,2);
+  lcd.print("people wet!");
 
-  phaseTwoSetupComplete = true;
+  phaseThreeSetupComplete = true;
 }
 
-int PhaseTwo::check() {
-  if (millis() - phaseTwoStartTime > 2000) {
+int PhaseThree::check() {
+  if (millis() - timeRunner > 2000) {
     updatePumpFlowRate();
-    phaseTwoStartTime = millis();
-    if (millis() - phaseTwoInitTime > 30000) {
-      if (pumpVolumeRate > 1.5 && pumpVolumeRate < 2.5) {
-        pumpDisable();
-        return RESULT_OK;
+    updateMistFlowRate();
+    timeRunner = millis();
+    if (millis() - phaseThreeInitTime > 40000) {
+      // Continuously check error cases.
+      bool mistFlowGood = mistFlowRate >= 4.5 && pumpVolumeRate <= 6.5;
+      bool pumpPressureSwitch = readPumpPressureSwitch();
+      lcd.setCursor(0,2);
+      lcd.print(pumpPressureSwitch);
+      if (pumpPressureSwitch) {
+        primingValveOpen();
+      }
+      bool pumpFlowGood = !pumpPressureSwitch
+          || (pumpPressureSwitch && pumpFlowRate >= 0.6 && pumpFlowRate <= 1.8);
+      if (mistFlowGood && pumpFlowGood) {
+        errorCount = 0;
+        lcd.setCursor(0,3);
+        lcd.print("Getting My Mist On");
       } else {
-        return RESULT_FAIL;
+        if (errorCount > 5) {
+          tearDown();
+          return RESULT_FAIL;
+        } else {
+          errorCount++;
+        }
       }
     } else {
+      float timeLeft = ( (float) phaseThreeInitTime
+          + 40000 - (float)millis() ) / (float) 1000;
+      char strBuffer[21];
+      char tempBuffer[6];
+      dtostrf(timeLeft, 4, 1, tempBuffer);
+      sprintf(strBuffer,"Countdown: %ss", tempBuffer);
       lcd.setCursor(0,3);
-      lcd.print( ( (float)phaseTwoInitTime + (float)30000 - (float)millis() ) / (float)1000);
+      lcd.print(strBuffer);
     }
   }
   return RESULT_WAIT;
 }
 
-PhaseTwo phaseTwo(&mistingValveOpen, &primingValveClose, &pumpEnable,
-    updatePumpFlowRate, &pumpDisable);
+void PhaseThree::tearDown() {
+  mistingValveClose();
+  primingValveClose();
+  pumpDisable();
+}
+
+
+PhaseThree phaseThree(&mistingValveOpen, &mistingValveClose, &primingValveClose,
+    &pumpEnable, updatePumpFlowRate, &pumpDisable, &updateMistFlowRate);
+
 
 /*
 * This is run once by the arduino board.
 */
 void setup() {
+  // Logger::start();
   // initialize LCD with number of columns and rows:
 	if (lcd.begin(LCD_COLS, LCD_ROWS))
 	{
@@ -272,6 +459,7 @@ void setup() {
   // Setup pins for all our switches (prime valve, mist valve and pump enable)
   pinMode(MIST_MODE_PIN, INPUT_PULLUP);
   pinMode(PRESSURE_SWITCH_PIN, INPUT_PULLUP);
+  pinMode(PUMP_SWITCH_PIN, INPUT);
 
   pinMode(PRIME_VALVE_PIN, OUTPUT);
   primingValveClose();
@@ -299,7 +487,6 @@ void setup() {
 
   // Run preconditionsCheck to make sure system is ready
   preconditionsCheck();
-  timeCheck = millis();
 }
 
 void loop() {
@@ -321,37 +508,58 @@ void loop() {
       lcd.print("Bad Flow Rate - HALT!");
       lcd.setCursor(0,1);
       lcd.print(pumpFlowRate);
+      currentPhase = halt;
       delay(1000);
     }
   } else if (currentPhase == two) {
     phaseTwo.setup();
     int check = phaseTwo.check();
-    bool ps = readMistSwitch();
+    bool ps = readPressureSwitch();
+    bool pps = readPumpPressureSwitch();
     if (check == RESULT_OK) {
       lcd.clear();
       lcd.setCursor(0,0);
-      lcd.print("Mister Mister Locked & Loaded");
+      lcd.print("Mister Mister Loaded");
       lcd.setCursor(0,1);
-      lcd.print(pumpFlowRate);
+      lcd.print(totalPumpVolume);
       lcd.setCursor(0,2);
       lcd.print(ps);
+      lcd.setCursor(0,3);
+      lcd.print(pps);
       // Update currentPhase and move onto phase 2.
       delay(2000);
-      currentPhase = two;
+      currentPhase = three;
     } else if (check == RESULT_FAIL) {
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print("No water - HALT!");
       lcd.setCursor(0,1);
-      lcd.print(pumpFlowRate);
+      lcd.print(totalPumpVolume);
       lcd.setCursor(0,2);
       lcd.print(ps);
+      lcd.setCursor(0,3);
+      lcd.print(pps);
       delay(1000);
+      currentPhase = halt;
     }
+  } else if (currentPhase == three) {
+    phaseThree.setup();
+    int check = phaseThree.check();
+    if (check == RESULT_WAIT) {
+      // Misting is going well.
+    } else if (check == RESULT_FAIL) {
+      // Something messed up.
+      lcd.setCursor(0,3);
+      lcd.print("HALT!");
+      delay(1000);
+      currentPhase = halt;
+    }
+  } else if (currentPhase == halt) {
+      // DO Nothing.
+  }
   //
   // } else if (currentPhase == three) {
   //
-  }
 }
 
 // Functions defining major steps in our state machine.
@@ -381,7 +589,32 @@ void continuousHaltCheck() {
 //   return (long) pumpPulseTimestamps.size() / avgTimePassed;
 // }
 
+/*
+ * Updates the Pump Flow Rate (pulses / second) and volume.
+ */
+void updateMistFlowRate() {
+  long count = mistPulseCount - lastMistPulseCount;
+  float timePassed = (millis() - mistFlowLastTimeChecked) / 1000;
 
+  lastMistPulseCount = mistPulseCount;
+  mistFlowLastTimeChecked = millis();
+
+  mistFlowRate = ((float) count / (float) timePassed / (float) MIST_FLOW_PULSE) * 60 * 60;
+  // pumpVolumeRate = pumpPulseCount / (float) PUMP_FLOW_PULSE;
+  totalMistVolume = totalMistPulseCount / (float) MIST_FLOW_PULSE;
+
+  char tempBuffer[6];
+  char strBuffer[21];
+  lcd.clear();
+  lcd.setCursor(0,0);
+  dtostrf(mistFlowRate, 4, 2, tempBuffer);
+  sprintf(strBuffer,"Flow: %sG/h", tempBuffer);
+  lcd.print(strBuffer);
+  lcd.setCursor(0,1);
+  dtostrf(totalMistVolume, 4, 2, tempBuffer);
+  sprintf(strBuffer,"Volume: %sG", tempBuffer);
+  lcd.print(strBuffer);
+}
 
 /*
  * Updates the Pump Flow Rate (pulses / second) and volume.
@@ -395,14 +628,27 @@ void updatePumpFlowRate() {
 
   pumpFlowRate = ((float) count / (float) timePassed / (float) PUMP_FLOW_PULSE) * 60;
   pumpVolumeRate = pumpPulseCount / (float) PUMP_FLOW_PULSE;
+  totalPumpVolume = totalPumpPulseCount / (float) PUMP_FLOW_PULSE;
 
+  char tempBuffer[6];
+  char strBuffer[21];
   lcd.clear();
   lcd.setCursor(0,0);
-  lcd.print("Flow Rate: ");
+  dtostrf(pumpFlowRate, 4, 2, tempBuffer);
+  sprintf(strBuffer,"Flow: %sG/m", tempBuffer);
+  lcd.print(strBuffer);
   lcd.setCursor(0,1);
-  lcd.print(pumpFlowRate);
-  lcd.setCursor(0,2);
-  lcd.print(pumpVolumeRate);
+  dtostrf(totalPumpVolume, 4, 2, tempBuffer);
+  sprintf(strBuffer,"Volume: %sG", tempBuffer);
+  lcd.print(strBuffer);
+}
+
+void printTimeLeft(float timeLeft) {
+  char strBuffer[21];
+  char tempBuffer[6];
+  dtostrf(timeLeft, 4, 1, tempBuffer);
+  sprintf(strBuffer,"Countdown: %ss", tempBuffer);
+  lcd.print(strBuffer);
 }
 
 /**
@@ -476,6 +722,7 @@ void mistPulseCounterISR()
 {
   // Increment the mist pulse counter
   mistPulseCount++;
+  totalMistPulseCount++;
   // if (mistPulseTimestamps.size() >= MAX_PULSES_STORED) {
   //   mistPulseTimestamps.pop();
   // }
@@ -489,6 +736,7 @@ void pumpPulseCounterISR()
 {
   // Increment the pump pulse counter
   pumpPulseCount++;
+  totalPumpPulseCount++;
   // if (pumpPulseTimestamps.size() >= MAX_PULSES_STORED) {
   //   pumpPulseTimestamps.pop();
   // }
@@ -531,10 +779,14 @@ void primingValveClose()
 
 bool readMistSwitch()
 {
-  return digitalRead(MIST_MODE_PIN);
+  return !digitalRead(MIST_MODE_PIN);
 }
 
 bool readPressureSwitch()
 {
-  return digitalRead(PRESSURE_SWITCH_PIN);
+  return !digitalRead(PRESSURE_SWITCH_PIN);
+}
+
+bool readPumpPressureSwitch() {
+  return digitalRead(PUMP_SWITCH_PIN);
 }
