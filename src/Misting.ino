@@ -25,7 +25,7 @@ byte MIST_MODE_PIN = 4;       // D4 - Simple on/off switch for controlling mist.
 byte PRESSURE_SWITCH_PIN = 5; // D5 - Switch goes off at a given pressure value
 
 byte PUMP_RELAY_PIN = 6;      // D6 - Enables or disables the pump
-byte SPARE_RELAY_PIN = 7;     // D7 - Spare Pin
+byte DE_PRESSURE_PIN = 7;     // D7 - Pin for DePressure Switch
 byte PUMP_SWITCH_PIN = 8;     // D8 - Pump Pressure switch
 
 
@@ -172,7 +172,7 @@ int PhaseOne::check() {
   if (millis() - timeRunner > 1000) { // Update values every two seconds
     updatePumpFlowRate();
     timeRunner = millis();
-    if (millis() - phaseOneInitTime > 60000) {
+    if (millis() - phaseOneInitTime > 90000) {
       if (pumpFlowRate >= 0.8 && pumpFlowRate <= 1.8) {
         tearDown();
         return RESULT_OK;
@@ -276,7 +276,7 @@ int PhaseTwo::check() {
   if (millis() - timeRunner > 1000) {
     updatePumpFlowRate();
     timeRunner = millis();
-    if (millis() - phaseTwoInitTime > 60000) {
+    if (millis() - phaseTwoInitTime > 120000) {
       if (totalPumpVolume >= 0.25 && totalPumpVolume <= 1.0
           && readPressureSwitch() && !readPumpSwitch()) {
         tearDown();
@@ -480,6 +480,7 @@ void setup() {
 
   // Setup pins for all our switches (prime valve, mist valve and pump enable)
   pinMode(MIST_MODE_PIN, INPUT_PULLUP);
+  pinMode(DE_PRESSURE_PIN, INPUT_PULLUP);
   pinMode(PRESSURE_SWITCH_PIN, INPUT_PULLUP);
   pinMode(PUMP_SWITCH_PIN, INPUT);
 
@@ -489,8 +490,6 @@ void setup() {
   mistingValveClose();
   pinMode(PUMP_RELAY_PIN, OUTPUT);
   pumpDisable();
-  pinMode(SPARE_RELAY_PIN, OUTPUT);
-  digitalWrite(SPARE_RELAY_PIN,HIGH);
 
   // pumpFlowLastTimeChecked = millis();
 
@@ -554,11 +553,15 @@ void loop() {
       if (millis() - timeRunner > 1000) {
         printStatus(0);
         timeRunner = millis();
+
+        bool dePressureSwitch = readDePressureSwitch();
+        if (dePressureSwitch) {
+          mistingValveClose();
+          primingValveOpen();
+          pumpDisable();
+        }
       }
   }
-  //
-  // } else if (currentPhase == three) {
-  //
 }
 
 // Functions defining major steps in our state machine.
@@ -705,8 +708,10 @@ void printStatus(float timeLeft) {
     lcd.setCursor(0,4);
     lcd.print(strBuffer);
   } else {
-    dtostrf(readBatteryVoltage(), 4, 2, tempBuffer);
-    sprintf(strBuffer,"BATT VOLTAGE: %sV", tempBuffer);
+    dtostrf(readBatteryVoltage(), 3, 1, tempBuffer);
+    sprintf(strBuffer,"BATT:%sV", tempBuffer);
+    bool dePressureSwitch = readDePressureSwitch();
+    sprintf(strBuffer, "%s DePres:%s", strBuffer, dePressureSwitch ? "1" : "0");
     lcd.setCursor(0, 4);
     lcd.print(strBuffer);
   }
@@ -838,6 +843,11 @@ void primingValveClose()
 bool readMistSwitch()
 {
   return digitalRead(MIST_MODE_PIN);
+}
+
+bool readDePressureSwitch() {
+  // TODO: Remove NOT when switch available.
+  return !digitalRead(DE_PRESSURE_PIN);
 }
 
 bool readPressureSwitch()
