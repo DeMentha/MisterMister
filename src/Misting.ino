@@ -1,7 +1,5 @@
 #include <hd44780_I2Cexp.h>
-#include <Logger.h>
-#include <StandardCplusplus.h>
-// #include <queue>
+#include <DeviceConstants.h>
 
 hd44780_I2Cexp lcd;
 
@@ -37,16 +35,15 @@ byte I2C_SDA_PIN = 4;         // A4
 byte BAT_VOLTAGE_PIN = 3;     // A3
 
 byte STATUS_LED = 13;
-int RXLED = 17;
 
-// Battery related constants
-const float BAT_SCALING = 1.05 * 5 * ((5.1+15)/5.1) / 1024;
-const float BAT_LIMIT_HIGH = 25; // Volts
-const float BAT_LIMIT_LOW = 8;  // Volts
-
-// Flow Sensor constants
-const float PUMP_FLOW_PULSE = 2255.86; // Pulses per Gallon
-const float MIST_FLOW_PULSE = 5223.3; // Pulses per Gallon
+// // Battery related constants
+// const float BAT_SCALING = 1.05 * 5 * ((5.1+15)/5.1) / 1024;
+// const float BAT_LIMIT_HIGH = 25; // Volts
+// const float BAT_LIMIT_LOW = 8;  // Volts
+//
+// // Flow Sensor constants
+// const float PUMP_FLOW_PULSE = 2255.86; // Pulses per Gallon
+// const float MIST_FLOW_PULSE = 5223.3; // Pulses per Gallon
 
 // Timing constants
 const int STEP_DELAY = 5000; // The time to wait in between each step (5 secs)
