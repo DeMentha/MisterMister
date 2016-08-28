@@ -172,7 +172,7 @@ int PhaseOne::check() {
   if (millis() - timeRunner > 1000) { // Update values every two seconds
     updatePumpFlowRate();
     timeRunner = millis();
-    if (millis() - phaseOneInitTime > 90000) {
+    if (millis() - phaseOneInitTime > 120000) {
       if (pumpFlowRate >= 0.8 && pumpFlowRate <= 1.8) {
         tearDown();
         return RESULT_OK;
@@ -187,7 +187,7 @@ int PhaseOne::check() {
       }
     }
     float timeLeft = ( (float) phaseOneInitTime
-        + 60000 - (float)millis() ) / (float) 1000;
+        + (float) 120000 - (float)millis() ) / (float) 1000;
     printStatus(timeLeft);
   }
   return RESULT_WAIT;
@@ -276,7 +276,7 @@ int PhaseTwo::check() {
   if (millis() - timeRunner > 1000) {
     updatePumpFlowRate();
     timeRunner = millis();
-    if (millis() - phaseTwoInitTime > 120000) {
+    if (millis() - phaseTwoInitTime > 80000) {
       if (totalPumpVolume >= 0.25 && totalPumpVolume <= 1.0
           && readPressureSwitch() && !readPumpSwitch()) {
         tearDown();
@@ -292,11 +292,12 @@ int PhaseTwo::check() {
           sprintf(haltReason, "2: HALT Pump On");
         }
         tearDown();
+        primingValveOpen();
         return RESULT_FAIL;
       }
     }
     float timeLeft = ( (float) phaseTwoInitTime
-        + 60000 - (float)millis() ) / (float) 1000;
+        + 80000 - (float)millis() ) / (float) 1000;
     printStatus(timeLeft);
   }
   return RESULT_WAIT;
@@ -404,7 +405,7 @@ int PhaseThree::check() {
       updateMistFlowRate();
       updatePumpDutyCycle();
       totalMistTime++;
-      if (millis() - phaseThreeInitTime > 40000) {
+      if (millis() - phaseThreeInitTime > 30000) {
         // Continuously check error cases.
         bool mistFlowGood = mistFlowRate >= 2.5 && mistFlowRate <= 9.5;
         bool pumpSwitch = readPumpSwitch();
@@ -432,7 +433,7 @@ int PhaseThree::check() {
     }
 
     float timeLeft = ( (float) phaseThreeInitTime
-        + 40000 - (float)millis() ) / (float) 1000;
+        + 30000 - (float)millis() ) / (float) 1000;
     printStatus(mistOn ? timeLeft : -1);
   }
   return RESULT_WAIT;
@@ -440,7 +441,7 @@ int PhaseThree::check() {
 
 void PhaseThree::tearDown() {
   mistingValveClose();
-  primingValveClose();
+  primingValveOpen();
   pumpDisable();
 }
 
@@ -553,13 +554,6 @@ void loop() {
       if (millis() - timeRunner > 1000) {
         printStatus(0);
         timeRunner = millis();
-
-        bool dePressureSwitch = readDePressureSwitch();
-        if (dePressureSwitch) {
-          mistingValveClose();
-          primingValveOpen();
-          pumpDisable();
-        }
       }
   }
 }
