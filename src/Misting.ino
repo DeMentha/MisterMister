@@ -277,7 +277,7 @@ int PhaseTwo::check() {
     updatePumpFlowRate();
     timeRunner = millis();
     if (millis() - phaseTwoInitTime > 80000) {
-      if (totalPumpVolume >= 0.25 && totalPumpVolume <= 1.0
+      if (totalPumpVolume >= 0.25 && totalPumpVolume <= 2.0
           && readPressureSwitch() && !readPumpSwitch()) {
         tearDown();
         return RESULT_OK;
@@ -405,13 +405,13 @@ int PhaseThree::check() {
       updateMistFlowRate();
       updatePumpDutyCycle();
       totalMistTime++;
-      if (millis() - phaseThreeInitTime > 30000) {
+      if (millis() - phaseThreeInitTime > 120000) {
         // Continuously check error cases.
-        bool mistFlowGood = mistFlowRate >= 2.5 && mistFlowRate <= 9.5;
+        bool mistFlowGood = mistFlowRate >= 2.5 && mistFlowRate <= 40.5;
         bool pumpSwitch = readPumpSwitch();
         bool pumpFlowGood = !pumpSwitch
             || (pumpSwitch && pumpFlowRate >= 0.8 && pumpFlowRate <= 1.8);
-        bool dutyCycleGood = pumpDutyCycle >= 0 && pumpDutyCycle <= 20;
+        bool dutyCycleGood = pumpDutyCycle >= 0 && pumpDutyCycle <= 40;
         if (mistFlowGood && pumpFlowGood && dutyCycleGood) {
           errorCount = 0;
         } else {
@@ -433,7 +433,7 @@ int PhaseThree::check() {
     }
 
     float timeLeft = ( (float) phaseThreeInitTime
-        + 30000 - (float)millis() ) / (float) 1000;
+        + 120000 - (float)millis() ) / (float) 1000;
     printStatus(mistOn ? timeLeft : -1);
   }
   return RESULT_WAIT;
