@@ -1,5 +1,6 @@
 #include <hd44780_I2Cexp.h>
 #include <DeviceConstants.h>
+#include <Logger.h>
 
 hd44780_I2Cexp lcd;
 
@@ -455,7 +456,7 @@ PhaseThree phaseThree(&mistingValveOpen, &mistingValveClose, &primingValveClose,
 * This is run once by the arduino board.
 */
 void setup() {
-  // Logger::start();
+  Logger::start();
   // initialize LCD with number of columns and rows:
 	if (lcd.begin(LCD_COLS, LCD_ROWS))
 	{

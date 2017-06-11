@@ -1,9 +1,8 @@
-#include <Logger.h>
-#if defined(ARDUINO) && ARDUINO >= 100
-  #include "Arduino.h"
-#else
-  #include "WProgram.h"
-#endif
+/*
+  Logger.cpp - Class for logging onto the hardware serial.
+*/
+#include "Arduino.h"
+#include "Logger.h"
 
 void Logger::start() {
   Serial.begin(9600);
