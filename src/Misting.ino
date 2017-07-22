@@ -458,13 +458,18 @@ PhaseThree phaseThree(&mistingValveOpen, &mistingValveClose, &primingValveClose,
 * This is run once by the arduino board.
 */
 void setup() {
+  // Serial.begin(115200);
+  // Serial.print("HELLO THERE");
   Logger::start();
+  Logger::log("BEGIN SETUP");
   // initialize LCD with number of columns and rows:
 	if (lcd.begin(LCD_COLS, LCD_ROWS))
 	{
 		// begin() failed so blink the onboard LED if possible
     #ifdef LED_BUILTIN
     		pinMode(LED_BUILTIN, OUTPUT);
+        Logger::log("LCD Not found.");
+        Logger::log("Initiate STANDBY MODE.");
     		while(1)
     		{
     			digitalWrite(LED_BUILTIN, HIGH);
@@ -481,6 +486,7 @@ void setup() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("DEMENTHA MISTING 2.0");
+
 
   // Setup pins for all our switches (prime valve, mist valve and pump enable)
   pinMode(MIST_MODE_PIN, INPUT_PULLUP);

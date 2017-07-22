@@ -3,13 +3,15 @@
 */
 #include "Arduino.h"
 #include "Logger.h"
+#include <stdio.h>
 
 void Logger::start() {
   Serial.begin(9600);
 }
 
-void Logger::log(int level, char *message) {
-  if (false) {
-    Serial.print(message);
-  }
+void Logger::log(char *message) {
+    char output[strlen(message) + 2];
+    strcpy(output, message);
+    strcat(output, "\n");
+    Serial.print(output);
 }
