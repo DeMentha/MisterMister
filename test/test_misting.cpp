@@ -8,7 +8,7 @@ void test_setup() {
 }
 
 void test_preconditions_success() {
-    
+    TEST_ASSERT_EQUAL(13, 13);
 }
 
 void test_preconditions_fail() {
@@ -45,9 +45,10 @@ void setup() {
     delay(2000);
 
     UNITY_BEGIN();    // IMPORTANT LINE!
-    // RUN_TEST(test_led_builtin_pin_number);
+    RUN_TEST(test_preconditions_success);
 
     pinMode(LED_BUILTIN, OUTPUT);
+    UNITY_END();
 }
 
 void loop() {
