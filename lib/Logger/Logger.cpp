@@ -9,7 +9,7 @@ void Logger::start() {
   Serial.begin(9600);
 }
 
-void Logger::log(char *message) {
+void Logger::log(const char *message) {
     char output[strlen(message) + 2];
     strcpy(output, message);
     strcat(output, "\n");

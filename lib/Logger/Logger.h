@@ -9,7 +9,7 @@
 class Logger {
 public:
   static void start();
-  static void log(char* message);
+  static void log(const char* message);
 };
 
 #endif
