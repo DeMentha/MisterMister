@@ -1,3 +1,5 @@
+#ifndef UNIT_TEST
+
 #include <hd44780_I2Cexp.h>
 #include <DeviceConstants.h>
 #include <Logger.h>
@@ -853,3 +855,5 @@ bool readPressureSwitch()
 bool readPumpSwitch() {
   return digitalRead(PUMP_SWITCH_PIN);
 }
+
+#endif
