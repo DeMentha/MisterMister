@@ -32,8 +32,8 @@ Ensure Arduino UNO board connected via USB.
 
 This code has been run and tested on an Arduino UNO board. Cannot verify that this works on other boards.
 
-
-- Run `platformio run -t upload && platformio serialports monitor --baud 9600`
+- Press the `PIO Terminal` button at the button of VS Code (http://docs.platformio.org/en/latest/ide/vscode.html#ide-vscode-toolbar)
+- In the terminal run `platformio run -t upload && platformio serialports monitor --baud 9600`
   - This will compile and upload code to the Arduino UNO board
   - Once uploaded, this command will also start the Serial monitor allowing you to immediately view log output.
 ## Unit Testing
@@ -42,8 +42,8 @@ Ensure Arduino UNO board connected via USB.
 
 This code has been run and tested on an Arduino UNO board. Cannot verify that this works on other boards.
 
-
-- Run `pio test -e uno --verbose`
+- Press the `PIO Terminal` button at the button of VS Code (http://docs.platformio.org/en/latest/ide/vscode.html#ide-vscode-toolbar)
+- In the terminal run `pio test -e uno --verbose`
   - This will compile, upload and run the unit tests on the Arduino board.
 
 
