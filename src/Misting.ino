@@ -3,6 +3,7 @@
 #include <hd44780_I2Cexp.h>
 #include <DeviceConstants.h>
 #include <Logger.h>
+#include <MisterStateMachine.h>
 
 hd44780_I2Cexp lcd;
 
@@ -468,7 +469,7 @@ void setup() {
 		// begin() failed so blink the onboard LED if possible
     #ifdef LED_BUILTIN
     		pinMode(LED_BUILTIN, OUTPUT);
-        Logger::log("LCD Not found.");
+        Logger::log("LCD not found.");
         Logger::log("Initiate STANDBY MODE.");
     		while(1)
     		{
@@ -481,6 +482,8 @@ void setup() {
     		while(1){} // spin and do nothing
     #endif
   }
+
+  Logger::log("LCD found.");
 
   // Print welcome message
   lcd.clear();
@@ -523,6 +526,8 @@ void setup() {
 }
 
 void loop() {
+  Logger::log("Started main loop");
+
   if (currentPhase == one) {
     phaseOne.setup();
     currentResult = phaseOne.check();
