@@ -6,24 +6,18 @@
 #define MisterStateMachine_h
 
 #include "Arduino.h"
+#include "Phase.h"
 
 class MisterStateMachine {
-        static const int RESULT_OK = 0;
-        static const int RESULT_FAIL = 1;
-        static const int RESULT_WAIT = 2;
-
+    private:
+        Phase* phases;
+        int size;
     public:
-        enum phase {
-            one,
-            two,
-            three,
-            halt
-        };
+        int currentPhase = 0;
 
-        phase currentPhase = one;
-
+        MisterStateMachine(Phase*, int size);
+        ~MisterStateMachine();
         void loop();
-        int phaseOneCheck();
 };
 
 #endif

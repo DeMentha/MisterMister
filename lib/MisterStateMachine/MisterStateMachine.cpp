@@ -4,18 +4,34 @@
 */
 
 #include "MisterStateMachine.h"
+#include "MisterState.h"
+#include "Phase.h"
 
-void MisterStateMachine::loop() {
-    if (currentPhase == one) {
-        int result = phaseOneCheck();
-        if (result == RESULT_OK) {
-            currentPhase = two;
-        } else if (result = RESULT_FAIL) {
-            currentPhase = halt;
-        }
+MisterStateMachine::MisterStateMachine(Phase* array, int size) {
+    phases = {};
+    for (int i(0); i < size; i++) {
+        phases[i] = array[i];
     }
+    this->size = size;
 }
 
-int MisterStateMachine::phaseOneCheck() {
-    return RESULT_OK;
+MisterStateMachine::~MisterStateMachine() {
+    delete[] phases;
+}
+
+void MisterStateMachine::loop() {
+    if (currentPhase != -1 && currentPhase < size) {
+        currentPhase++;
+        Phase * phase = &phases[currentPhase];
+        phase->setup();
+        MisterState state = phase->check();
+        // if (state == RESULT_OK) {
+        //     currentPhase++;
+        // } else if (state == RESULT_FAIL) {
+        //     currentPhase = -1;
+        // }
+    } else {
+        // currentPhase > phases.length means MisterStateMachine is complete.
+        // Run complete steps.
+    }
 }

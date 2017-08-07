@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <unity.h>
 #include <MisterStateMachine.h>
+#include <Phase.h>
+#include <TestPhase.h>
 
 #ifdef UNIT_TEST
 
@@ -13,10 +15,13 @@ void test_preconditions_success() {
 }
 
 void test_state_machine() {
-    MisterStateMachine msm;
-    TEST_ASSERT_EQUAL(MisterStateMachine::phase::one, msm.currentPhase);
-    msm.loop();
-    TEST_ASSERT_EQUAL(MisterStateMachine::phase::two, msm.currentPhase);
+    Phase *phases = {new TestPhase()};
+    MisterStateMachine * msm = new MisterStateMachine(phases, 1);
+
+    // MisterStateMachine msm;
+    TEST_ASSERT_EQUAL(0, msm->currentPhase);
+    msm->loop();
+    TEST_ASSERT_EQUAL(1, msm->currentPhase);
 }
 
 void test_preconditions_fail() {
@@ -53,7 +58,7 @@ void setup() {
     delay(2000);
 
     UNITY_BEGIN();    // IMPORTANT LINE!
-    RUN_TEST(test_preconditions_success);
+    // RUN_TEST(test_preconditions_success);
     RUN_TEST(test_state_machine);
 
     pinMode(LED_BUILTIN, OUTPUT);

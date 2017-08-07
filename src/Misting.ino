@@ -4,6 +4,10 @@
 #include <DeviceConstants.h>
 #include <Logger.h>
 #include <MisterStateMachine.h>
+#include <Phase.h>
+
+// TEST classes
+#include <TestPhase.h>
 
 hd44780_I2Cexp lcd;
 
