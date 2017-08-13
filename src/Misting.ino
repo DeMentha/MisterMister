@@ -17,8 +17,11 @@ const int LCD_COLS = 20;
 
 // Digital Pin Allocations
 byte BAT_PIN = 0;
-byte PRIME_VALVE_PIN = 0;     // D0 - Controls water flow for priming phase
-byte MIST_VALVE_PIN = 1;      // D1 - Controls water flow for mist phase
+/**
+ * Both D0 and D1 are used for the Serial output. Do NOT use them for anything else.
+ */
+byte PRIME_VALVE_PIN = 12;     // D12 (Green) - Controls water flow for priming phase 
+byte MIST_VALVE_PIN = 11;      // D11 (Blue) - Controls water flow for mist phase
 
 byte PUMP_FLOW_PIN = 2;       // D2 - Flow sensor for pump (counts pulses)
                               // must be 2 or 3 for interrupt service pin. This
@@ -32,15 +35,15 @@ byte MIST_FLOW_PIN = 3;       // D3 - Mist sensor must be 2 or 3 for reasons
 byte MIST_MODE_PIN = 4;       // D4 - Simple on/off switch for controlling mist.
 byte PRESSURE_SWITCH_PIN = 5; // D5 - Switch goes off at a given pressure value
 
-byte PUMP_RELAY_PIN = 6;      // D6 - Enables or disables the pump
-byte DE_PRESSURE_PIN = 7;     // D7 - Pin for DePressure Switch
+byte PUMP_RELAY_PIN = 10;      // D10 (Purple) - Enables or disables the pump
+byte DE_PRESSURE_PIN = 9;     // D9 (Grey) - Spare Relay / Pin for DePressure Switch
 byte PUMP_SWITCH_PIN = 8;     // D8 - Pump Pressure switch
 
 
 // Analog Pin Allocations
-byte I2C_SCL_PIN = 5;         // A5
-byte I2C_SDA_PIN = 4;         // A4
-byte BAT_VOLTAGE_PIN = 3;     // A3
+byte I2C_SCL_PIN = 5;         // A5 (Yellow)
+byte I2C_SDA_PIN = 4;         // A4 (Orange)
+byte BAT_VOLTAGE_PIN = 3;     // A3 
 
 byte STATUS_LED = 13;
 
@@ -465,16 +468,16 @@ PhaseThree phaseThree(&mistingValveOpen, &mistingValveClose, &primingValveClose,
 void setup() {
   // Serial.begin(115200);
   // Serial.print("HELLO THERE");
-  Logger::start();
-  Logger::log("BEGIN SETUP");
+  // Logger::start();
+  // Logger::log("BEGIN SETUP");
   // initialize LCD with number of columns and rows:
 	if (lcd.begin(LCD_COLS, LCD_ROWS))
 	{
 		// begin() failed so blink the onboard LED if possible
     #ifdef LED_BUILTIN
     		pinMode(LED_BUILTIN, OUTPUT);
-        Logger::log("LCD not found.");
-        Logger::log("Initiate STANDBY MODE.");
+        // Logger::log("LCD not found.");
+        // Logger::log("Initiate STANDBY MODE.");
     		while(1)
     		{
     			digitalWrite(LED_BUILTIN, HIGH);
@@ -487,7 +490,7 @@ void setup() {
     #endif
   }
 
-  Logger::log("LCD found.");
+  // Logger::log("LCD found.");
 
   // Print welcome message
   lcd.clear();
@@ -530,7 +533,12 @@ void setup() {
 }
 
 void loop() {
-  Logger::log("Started main loop");
+  // Logger::log("Started main loop");
+  bool mistSwitch = readMistSwitch();
+  while (!mistSwitch) {
+    // Misting is off, so don't anything until it turns on.
+    mistSwitch = readMistSwitch();
+  }
 
   if (currentPhase == one) {
     phaseOne.setup();

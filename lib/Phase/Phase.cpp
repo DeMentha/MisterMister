@@ -15,7 +15,7 @@ void Phase::setup() {
 }
 
 MisterState Phase::check() {
-    return RESULT_OK;
+    return OK;
     // TODO: for some reason calling internalCheck() breaks this and the tests
     // never finish. Need to figure out how to properly use Abstract classes.
     // return internalCheck();

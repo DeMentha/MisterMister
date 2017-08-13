@@ -6,9 +6,9 @@
 #define MisterState_h
 
 enum MisterState {
-    RESULT_WAIT,
-    RESULT_OK,
-    RESULT_FAIL
+    WAIT,
+    OK,
+    FAIL
 };
 
 #endif

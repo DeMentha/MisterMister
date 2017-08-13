@@ -15,7 +15,7 @@ void TestPhase::internalSetup() {
 }
 
 MisterState TestPhase::internalCheck() {
-    return RESULT_OK;
+    return OK;
 }
 
 void TestPhase::tearDown() {
