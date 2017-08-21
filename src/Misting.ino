@@ -105,6 +105,7 @@ long timeRunner;
 
 /**
  * Class that stores all phase one related variables and functions.
+ * Phase One is used to test the pump is working and prime the hoses with water.
  */
 class PhaseOne
 {
@@ -149,6 +150,9 @@ const double PhaseOne::PHASE_ONE_WAIT_TIME = 60 * 1 * 1000; // Currently 60 seco
 
 /**
  * Gets the system ready for phase one.
+ * - Close misting valve
+ * - Open priming valve
+ * - Enable pump
  */
 void PhaseOne::setup()
 {
@@ -177,7 +181,11 @@ void PhaseOne::setup()
 
 /**
  * Checks if phase one has completed succesfully. Returns OK, FAIL or WAIT.
- * WAIT means we're still waiting for the result.
+ *
+ * WAIT - we're still waiting for the result.
+ * OK - The pump flow rate is within an acceptable range
+ * HALT - The pump flow rate is NOT within an acceptable range.
+ * 
  */
 int PhaseOne::check() {
   if (millis() - timeRunner > 1000) { // Update values every two seconds
@@ -204,6 +212,10 @@ int PhaseOne::check() {
   return RESULT_WAIT;
 }
 
+/**
+ * Phase One complete.
+ * - Disable pump
+ */
 void PhaseOne::tearDown() {
   pumpDisable();
 }
@@ -213,6 +225,8 @@ PhaseOne phaseOne(&primingValveOpen, &mistingValveClose, &pumpEnable,
 
 /**
  * Class that stores all phase one related variables and functions.
+ * Phase Two fills the accumulator with water until a certain pressure
+ * and volume is reached.
  */
 class PhaseTwo
 {
@@ -257,6 +271,12 @@ const float PhaseTwo::PHASE_TWO_MIN_VOLUME = 1.5;
 const float PhaseTwo::PHASE_TWO_MAX_VOLUME = 2.5;
 const long PhaseTwo::PHASE_TWO_WAIT_TIME = 60 * 1 * 1000; // Currently 60 seconds
 
+/**
+ * Sets up phase two to fill the accumulator with water.
+ * - Close misting valve
+ * - Close priming valve
+ * - Enable pump
+ */
 void PhaseTwo::setup() {
   if (phaseTwoSetupComplete) {
     return;
@@ -283,6 +303,15 @@ void PhaseTwo::setup() {
   phaseTwoSetupComplete = true;
 }
 
+/**
+ * Checks if Phase Two has completed succesfully. Returns OK, FAIL or WAIT.
+ *
+ * WAIT - Still waiting to check result
+ * OK - when 1) the pump volume has reached a certain threshold and
+ *           2) the pressure switch is on and
+ *           3) the pump switch is OFF.
+ * FAIL - One of the above conditions was not met.
+ */
 int PhaseTwo::check() {
   if (millis() - timeRunner > 1000) {
     updatePumpFlowRate();
@@ -421,8 +450,8 @@ int PhaseThree::check() {
         bool mistFlowGood = mistFlowRate >= 2.5 && mistFlowRate <= 40.5;
         bool pumpSwitch = readPumpSwitch();
         bool pumpFlowGood = !pumpSwitch
-            || (pumpSwitch && pumpFlowRate >= 0.8 && pumpFlowRate <= 1.8);
-        bool dutyCycleGood = pumpDutyCycle >= 0 && pumpDutyCycle <= 40;
+            || (pumpSwitch && pumpFlowRate >= 0.7 && pumpFlowRate <= 1.8);
+        bool dutyCycleGood = pumpDutyCycle >= 0 && pumpDutyCycle <= 50;
         if (mistFlowGood && pumpFlowGood && dutyCycleGood) {
           errorCount = 0;
         } else {
@@ -430,7 +459,11 @@ int PhaseThree::check() {
             if (!pumpFlowGood) {
               sprintf(haltReason, "3: HALT PFlow Bad");
             } else if (!mistFlowGood) {
-              sprintf(haltReason, "3: HALT MFlow Bad");
+              if (mistFlowRate < 2.5) {
+                sprintf(haltReason, "3: HALT MFlow Low");
+              } else {
+                sprintf(haltReason, "3: HALT MFlow High");
+              }
             } else if (!dutyCycleGood) {
               sprintf(haltReason, "3: HALT DCycle Bad");
             }
@@ -468,16 +501,16 @@ PhaseThree phaseThree(&mistingValveOpen, &mistingValveClose, &primingValveClose,
 void setup() {
   // Serial.begin(115200);
   // Serial.print("HELLO THERE");
-  // Logger::start();
-  // Logger::log("BEGIN SETUP");
+  Logger::start();
+  Logger::log("BEGIN SETUP");
   // initialize LCD with number of columns and rows:
 	if (lcd.begin(LCD_COLS, LCD_ROWS))
 	{
 		// begin() failed so blink the onboard LED if possible
     #ifdef LED_BUILTIN
     		pinMode(LED_BUILTIN, OUTPUT);
-        // Logger::log("LCD not found.");
-        // Logger::log("Initiate STANDBY MODE.");
+        Logger::log("LCD not found.");
+        Logger::log("Initiate STANDBY MODE.");
     		while(1)
     		{
     			digitalWrite(LED_BUILTIN, HIGH);
@@ -490,7 +523,7 @@ void setup() {
     #endif
   }
 
-  // Logger::log("LCD found.");
+  Logger::log("LCD found.");
 
   // Print welcome message
   lcd.clear();
@@ -622,6 +655,9 @@ void updateMistFlowRate() {
   mistFlowLastTimeChecked = millis();
 
   mistFlowRate = ((float) count / (float) timePassed / (float) MIST_FLOW_PULSE) * 60 * 60;
+  // char tempBuffer[6];
+  // dtostrf(mistFlowRate, 3, 1, tempBuffer);
+  // Logger::log(tempBuffer);
   totalMistVolume = totalMistPulseCount / (float) MIST_FLOW_PULSE;
 }
 
@@ -722,6 +758,10 @@ void printStatus(float timeLeft) {
     bool pumpPressureSwitch = readPumpSwitch();
     bool mistSwitch = readMistSwitch();
     dtostrf(pumpDutyCycle, 2, 0, tempBuffer);
+    // P: Pressure switch for pump
+    // Pu: Pump on/off
+    // D: Duty Cycle
+    // M: Main Mist Switch on/off
     sprintf(strBuffer, "P:%s Pu:%s D:%s%% M:%s", pressureSwitch ? "1" : "0",
         pumpPressureSwitch ? "1" : "0", tempBuffer,
         mistSwitch ? "1" : "0");
